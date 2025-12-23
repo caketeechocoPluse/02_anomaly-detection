@@ -6,15 +6,11 @@ import random
 from typing import Any, Protocol
 
 #%%
-
-fake = Faker('ko_KR')
-start_dt = datetime.date(2025, 1, 1)
-end_dt = datetime.date(2025, 12, 31)
-
-class NormalGeneratingStrategy(Protocol):
+class GeneratingStrategy(Protocol):
     """
-    정상 데이터 생성합니다//
+    데이터 생성//
     프로토콜//
+    전략 패턴//
     """
     def generate(self, idx: int) -> dict[str, Any]:
         ...
@@ -22,13 +18,44 @@ class NormalGeneratingStrategy(Protocol):
 class NormalDataGenerator:
     def __init__(
         self,
-        num_total_transactions=100000,
-        anomaly_ratio=0.05,
+        fake: Faker,
+        start_dt: datetime.date,
+        end_dt: datetime.date,
         ):
-        self.num_total_transactions = num_total_transactions
-        self.anomaly_ratio = anomaly_ratio
-        self.num_anomalies = int(num_total_transactions * anomaly_ratio)
+        self.fake = fake
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+    
+    def generate(self, idx: int) -> dict[str, Any]:
+        """정상 거래 생성"""
 
+        # 계정과목 정의
+        accounts = {
+            '현금': (10000, 5000000),
+            '매출': (100000, 10000000),
+            '매입': (50000, 5000000),
+            '급여': (2000000, 5000000),
+            '임차료': (500000, 3000000),
+            '접대비': (50000, 500000),
+            '여비교통비': (10000, 200000),
+        }
+
+        account = random.choice(list(accounts.keys()))
+        min_amt, max_amt = accounts[account]
+
+        transaction = {
+            '거래번호': f'TXN{idx+1:010d}',
+            '거래일자': self.fake.date_between(start_date = self.start_dt, end_date = self.end_dt),
+            '계정과목': account,
+            '거래처': self.fake.company(),
+            '금액': random.randint(min_amt, max_amt),
+            '적요': self._generate_description(account),
+            '담당자': self.fake.name(),
+            '승인자': self.fake.name(),
+        }
+        return transaction
+    
+    
     def _generate_description(self, account):
         """적요 생성"""
         descriptions = {
@@ -42,82 +69,77 @@ class NormalDataGenerator:
         }
         return random.choice(descriptions.get(account, ['기타']))
 
-    def generate(self) -> pd.DataFrame:
-        """정상 거래 생성"""
-        transactions = []
 
-        # 계정과목 정의
-        accounts = {
-            '현금': (10000, 5000000),
-            '매출': (100000, 10000000),
-            '매입': (50000, 5000000),
-            '급여': (2000000, 5000000),
-            '임차료': (500000, 3000000),
-            '접대비': (50000, 500000),
-            '여비교통비': (10000, 200000),
-        }
-
-        for i in range(self.num_total_transactions - self.num_anomalies):
-            account = random.choice(list(accounts.keys()))
-            min_amt, max_amt = accounts[account]
-
-            transaction = {
-                '거래번호': f'TXN{i+1:010d}',
-                '거래일자': fake.date_between(start_date=start_dt, end_date=end_dt),
-                '계정과목': account,
-                '거래처': fake.company(),
-                '금액': random.randint(min_amt, max_amt),
-                '적요': self._generate_description(account),
-                '담당자': fake.name(),
-                '승인자': fake.name(),
-            }
-            transactions.append(transaction)
-
-        return pd.DataFrame(transactions)
 
 #%%
 
-class AnomalyGeneratingStrategy(Protocol):
-    """
-    이상 데이터 생성합니다//
-    프로토콜//
-    전략 패턴//
-    """
-    def generate(self, idx: int) -> dict[str, Any]:
-        ...
+
 
 #%%
 class DuplicateGenerator:
+    """중복 거래 (횡령 의심)"""    
+    def __init__(
+        self,
+        fake: Faker,
+        start_dt: datetime.date,
+        end_dt: datetime.date,
+        ):
+        self.fake = fake
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+        
     def generate(self, idx: int) -> dict[str, Any]:
         return {
             '거래번호': f'ANO{idx+1:010d}',
-            '거래일자': fake.date_between(start_date = start_dt, end_date=end_dt),
+            '거래일자': self.fake.date_between(start_date = self.start_dt, end_date = self.end_dt),
             '계정과목': '접대비',
             '거래처': '동일거래처',
             '금액': 450000,
             '적요': '거래처 접대',
-            '담당자': fake.name(),
-            '승인자': fake.name(),
+            '담당자': self.fake.name(),
+            '승인자': self.fake.name(),
             '이상유형': '중복거래'
         }
 #%%
 class RoundGenerator:
+    """라운드 금액 (조작 의심)"""    
+    def __init__(
+        self,
+        fake: Faker,
+        start_dt: datetime.date,
+        end_dt: datetime.date,
+        ):
+        self.fake = fake
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+        
     def generate(self, idx: int) -> dict[str, Any]:
         return {
             '거래번호': f'ANO{idx+1:010d}',
-            '거래일자': fake.date_between(start_date = start_dt, end_date=end_dt),
+            '거래일자': self.fake.date_between(start_date = self.start_dt, end_date = self.end_dt),
             '계정과목': '매입',
-            '거래처': fake.company(),
+            '거래처': self.fake.company(),
             '금액': random.choice([1000000, 2000000, 5000000, 10000000]),
             '적요': '물품 구매',
-            '담당자': fake.name(),
-            '승인자': fake.name(),
+            '담당자': self.fake.name(),
+            '승인자': self.fake.name(),
+            '이상유형': '라운드 금액'
         }
 #%%
 class WeekendTradeGenerator:
     """주말 거래 (의심)"""
+    def __init__(
+        self,
+        fake: Faker,
+        start_dt: datetime.date,
+        end_dt: datetime.date,
+        ):
+        self.fake = fake
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+        
     def generate(self, idx: int) -> dict[str, Any]:
-        weekend_date = fake.date_between(start_date=start_dt, end_date=end_dt)
+        weekend_date = self.fake.date_between(start_date = self.start_dt, end_date = self.end_dt)
 
         while weekend_date.weekday() < 5:  # 토요일(5) 또는 일요일(6)
             weekend_date += datetime.timedelta(days=1)
@@ -126,50 +148,79 @@ class WeekendTradeGenerator:
             '거래번호': f'ANO{idx+1:010d}',
             '거래일자': weekend_date,
             '계정과목': '현금',
-            '거래처': fake.company(),
+            '거래처': self.fake.company(),
             '금액': random.randint(100000, 1000000),
             '적요': '긴급 지출',
-            '담당자': fake.name(),
-            '승인자': fake.name(),
+            '담당자': self.fake.name(),
+            '승인자': self.fake.name(),
+            '이상유형': '주말 거래'
         }
 #%%
 class UnusualAmountGenerator:
     """비정상적 금액 (통계적 이상치)"""
+    def __init__(
+        self,
+        fake: Faker,
+        start_dt: datetime.date,
+        end_dt: datetime.date,
+        ):
+        self.fake = fake
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+        
     def generate(self, idx: int) -> dict[str, Any]:
         return {
             '거래번호': f'ANO{idx+1:010d}',
-            '거래일자': fake.date_between(start_date = start_dt, end_date=end_dt),
+            '거래일자': self.fake.date_between(start_date = self.start_dt, end_date = self.end_dt),
             '계정과목': '여비교통비',
-            '거래처': fake.company(),
+            '거래처': self.fake.company(),
             '금액': random.randint(5000000, 10000000),  # 비정상적으로 큼
             '적요': '출장비',
-            '담당자': fake.name(),
-            '승인자': fake.name(),
+            '담당자': self.fake.name(),
+            '승인자': self.fake.name(),
+            '이상유형': '비정상적 금액'
         }
 #%%
 class FrequentSmallGenerator:
-    """빈번한 소액 거래 (분할 의심)"""
+    """빈번한 소액거래 (분할 의심)"""
+    def __init__(
+        self,
+        fake: Faker,
+        start_dt: datetime.date,
+        end_dt: datetime.date,
+        ):
+        self.fake = fake
+        self.start_dt = start_dt
+        self.end_dt = end_dt
+        
     def generate(self, idx: int) -> dict[str, Any]:
         return {
             '거래번호': f'ANO{idx+1:010d}',
-            '거래일자': fake.date_between(start_date = start_dt, end_date=end_dt),
+            '거래일자': self.fake.date_between(start_date = self.start_dt, end_date = self.end_dt),
             '계정과목': '접대비',
             '거래처': '특정거래처',
             '금액': random.randint(90000, 99000),  # 10만원 직전
             '적요': '소액 접대',
             '담당자': '김철수',  # 동일 담당자
-            '승인자': fake.name(),
+            '승인자': self.fake.name(),
+            '이상유형': '빈번한 소액거래'
         }
 #%%
 
 class AccountingDataGenerator:
     def __init__(self,
-                normal_strategies: list[NormalGeneratingStrategy],
-                anomaly_strategies: list[AnomalyGeneratingStrategy],
+                normal_strategies: list[GeneratingStrategy],
+                anomaly_strategies: list[GeneratingStrategy],
+                fake: Faker,
+                start_dt: datetime.date,
+                end_dt: datetime.date,
                 num_total_transactions=100000,
                 anomaly_ratio=0.05):
         self.normal_strategies = normal_strategies
         self.anomaly_strategies = anomaly_strategies
+        self.fake = fake
+        self.start_dt = start_dt
+        self.end_dt = end_dt
         self.num_total_transactions = num_total_transactions
         self.anomaly_ratio = anomaly_ratio
         self.num_anomalies = int(num_total_transactions * anomaly_ratio)
@@ -183,17 +234,21 @@ class AccountingDataGenerator:
         anomaly_df = pd.DataFrame(num_anomalies)
         return anomaly_df
 
-    def generate_dataset(self):
-        """전체 데이터셋 생성"""
+    def generate_normal(self) -> pd.DataFrame:
         normal_transaction = self.num_total_transactions - self.num_anomalies
         
-        list_normal = []
+        num_normal = []
         for i in range(normal_transaction):
             strategy = random.choice(self.normal_strategies)
-            list_normal = strategy.generate(i)
-            list_normal.append(list_normal)
+            temp_normal = strategy.generate(i)
+            num_normal.append(temp_normal)
+        normal_df = pd.DataFrame(num_normal)
+        return normal_df
+
+    def generate_dataset(self):
+        """전체 데이터셋 생성"""
         
-        normal_df = pd.DataFrame(list_normal)
+        normal_df = self.generate_normal()
         anomaly_df = self.generate_anomalies()
 
         # 이상 거래 표시 컬럼 추가
@@ -209,21 +264,28 @@ class AccountingDataGenerator:
 # %%
 if __name__ == '__main__':
     # 1. 사용할 전략들 인스턴스화
-    normal_gen = [NormalDataGenerator()]
+    fake = Faker('ko_KR')
+    start_dt = datetime.date(2025, 1, 1)
+    end_dt = datetime.date(2025, 12, 31)
+    
+    normal_gen = [NormalDataGenerator(fake, start_dt, end_dt)]
     anomaly_gen = [
-        DuplicateGenerator(),
-        RoundGenerator(),
-        WeekendTradeGenerator(),
-        UnusualAmountGenerator(),
-        FrequentSmallGenerator()        
+        DuplicateGenerator(fake, start_dt, end_dt),
+        RoundGenerator(fake, start_dt, end_dt),
+        WeekendTradeGenerator(fake, start_dt, end_dt),
+        UnusualAmountGenerator(fake, start_dt, end_dt),
+        FrequentSmallGenerator(fake, start_dt, end_dt)        
     ]
 
     # 2. Generator에 주입
     generator = AccountingDataGenerator(
-        normal_strategies=normal_gen,
-        anomaly_strategies=anomaly_gen,
-        num_total_transactions=1000,
-        anomaly_ratio=0.1,
+        normal_strategies = normal_gen,
+        anomaly_strategies = anomaly_gen,
+        fake = fake,
+        start_dt = start_dt,
+        end_dt = end_dt,
+        num_total_transactions = 1000,
+        anomaly_ratio = 0.1,
     )
 
     # 3. 데이터셋 생성
