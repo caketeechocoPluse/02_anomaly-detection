@@ -6,7 +6,7 @@ import random
 from typing import Any, Protocol
 
 
-# %%
+
 class GeneratingStrategy(Protocol):
     """
     데이터 생성//
@@ -73,10 +73,10 @@ class NormalDataGenerator:
         return random.choice(descriptions.get(account, ["기타"]))
 
 
-# %%
 
 
-# %%
+
+
 class DuplicateGenerator:
     """중복 거래 (횡령 의심)"""
 
@@ -106,7 +106,7 @@ class DuplicateGenerator:
         }
 
 
-# %%
+
 class RoundGenerator:
     """라운드 금액 (조작 의심)"""
 
@@ -136,7 +136,7 @@ class RoundGenerator:
         }
 
 
-# %%
+
 class WeekendTradeGenerator:
     """주말 거래 (의심)"""
 
@@ -171,7 +171,7 @@ class WeekendTradeGenerator:
         }
 
 
-# %%
+
 class UnusualAmountGenerator:
     """비정상적 금액 (통계적 이상치)"""
 
@@ -201,7 +201,7 @@ class UnusualAmountGenerator:
         }
 
 
-# %%
+
 class FrequentSmallGenerator:
     """빈번한 소액거래 (분할 의심)"""
 
@@ -231,7 +231,7 @@ class FrequentSmallGenerator:
         }
 
 
-# %%
+
 
 
 class AccountingDataGenerator:
@@ -292,7 +292,7 @@ class AccountingDataGenerator:
         return full_df
 
 
-# %%
+
 if __name__ == "__main__":
     # 1. 사용할 전략들 인스턴스화
     fake = Faker("ko_KR")
@@ -322,4 +322,4 @@ if __name__ == "__main__":
     # 3. 데이터셋 생성
     df = generator.generate_dataset()
     print(f"생성 완료! 이상 데이터 유형 분포:\n{df['이상유형'].value_counts()}")
-# %%
+
