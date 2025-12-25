@@ -1,5 +1,6 @@
 .venv/
 __pycache__/
+.mypy_cache/
 *.pyc
 .env
 .DS_Store
@@ -8,3 +9,6 @@ data/raw/*
 outputs/*
 !outputs/.gitkeep
 CLAUDE.md
+.python-version
+uv.lock
+.gitattributes

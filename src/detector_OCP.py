@@ -1,7 +1,7 @@
 # src/detector.py
 
 from typing import Protocol
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, asdict
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -14,8 +14,8 @@ import datetime
 #                                  1. 데이터 클래스                             #
 # ---------------------------------------------------------------------------- #
 @dataclass
-class AnomalyResult:
-    """이상 거래 결과 데이터 클래스"""
+class AnomalyReport:
+    """이상 거래 결과 // 데이터 클래스"""
 
     index: int
     type: str
@@ -31,7 +31,8 @@ class DetectionStrategy(Protocol):
     """이상 거래 탐지//
     프로토콜//"""
 
-    def detect(self, df: pd.DataFrame) -> list[AnomalyResult]: ...
+    def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
+        ...
 
 
 # ---------------------------------------------------------------------------- #
@@ -70,13 +71,13 @@ class AnomalyDetector:
 
         return self._process_results(df, all_results)
 
-    def _process_results(self, df: pd.DataFrame, results: list[AnomalyResult]) -> pd.DataFrame:
+    def _process_results(self, df: pd.DataFrame, results: list[AnomalyReport]) -> pd.DataFrame:
         """탐지 결과 반환"""
         if not results:
             return pd.DataFrame()
 
         # 중복 제거 (같은 거래에 여러 이상 유형)
-        anomaly_df = pd.DataFrame(results)
+        anomaly_df = pd.DataFrame([asdict(r) for r in results])
         anomaly_df = anomaly_df.sort_values("score", ascending=False)
 
         # 원본 데이터와 조인
@@ -90,30 +91,10 @@ class AnomalyDetector:
         return result
 
 
-
-def _process_results(self, df: pd.DataFrame, results: list[AnomalyResult]) -> pd.DataFrame:
-    """탐지 결과 반환"""
-    if not results:  # ✅ 파라미터 사용
-        return pd.DataFrame()
-
-    # 중복 제거 (같은 거래에 여러 이상 유형)
-    anomaly_df = pd.DataFrame([vars(r) for r in results])  # ✅ results 사용
-    anomaly_df = anomaly_df.sort_values("score", ascending=False)
-
-    # 원본 데이터와 조인
-    result = df.loc[anomaly_df["index"]].copy()  # ✅ 파라미터 df 사용
-    result["탐지유형"] = anomaly_df["type"].values
-    result["심각도"] = anomaly_df["severity"].values
-    result["설명"] = anomaly_df["description"].values
-    result["위험점수"] = anomaly_df["score"].values
-
-    print(f"\n✅ 탐지 완료: {len(result)}건의 의심 거래 발견")
-    return result
-
-
 # ---------------------------------------------------------------------------- #
 #                                   5. Client                                  #
 # ---------------------------------------------------------------------------- #
+
 if __name__ == "__main__":
     pass
     # a. 인스턴스화
