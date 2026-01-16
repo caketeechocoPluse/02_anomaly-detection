@@ -1,7 +1,7 @@
 # src/detector.py
 
 from typing import Protocol, Any
-from dataclasses import dataclass, fields, asdict
+from dataclasses import dataclass, fields, asdict, field
 from enum import Enum
 import pandas as pd
 import numpy as np
@@ -21,41 +21,17 @@ class AnomalyReport:
 
     # 필수: 식별
     index: int
-    transaction_id: str | None = None
-    
-    # 필수: 탐지 결과
     type: str
     severity: str
     description: str
     score: float = 0.0
-
-    # 컨텍스트
+    transaction_id: str | None = None
     context: dict[str, Any] | None = None
-
-    def get_context_value(self, key: str, default=None):
-        if self.context is None:
-            return default
-        return self.context.get(key, default)
-
-    def has_context(self) -> bool:
-        return self.context is not None and len(self.context) > 0
-
-    # def get_transaction_date(self) -> datetime.date | None:
-    #     """거래일자 파싱"""
-    #     if date_str:
-    #         return pd.to_datetime(date_str).date()
-    #     return None
-
-
-# for anomaly in anomalies:
-#     amount = anomaly.get_context_value("금액", default=0)
-#     date = anomaly.get_transaction_date()
-#     if anomaly.has_context():
-#         print(f"상세 정보: {anomaly.context}")
-
-
-
-
+    detected_at: datetime.datetime = field(default_factory=datetime.datetime.now)
+    
+    def to_dict(self) -> dict:
+        """딕셔너리 변환"""
+        return asdict(self)
 
 
 # ---------------------------------------------------------------------------- #
@@ -79,20 +55,20 @@ class DuplicateDetector:
         """중복 거래 탐지 실행"""
 
         # 동일 날짜, 계정, 금액, 거래처
-        duplicates = self.df[
-            self.df.duplicated(
-                subset=["거래일자", "계정과목", "금액", "거래처"], keep=False
-            )
-        ]
+        duplicates = df[df.duplicated(
+            subset=["거래일자", "계정과목", "금액", "거래처"],
+            keep=False
+        )]
+        
         results = []
         for idx in duplicates.index:
-            results.extend([
-            "index": idx,
-            "type": "중복거래",
-            "severity": "HIGH",
-            "description": "동일한 거래가 중복 발생",
-            "score": 0.9,
-            ])
+            results.append(AnomalyReport(
+                index=int(idx),
+                type="중복거래",
+                severity="HIGH",
+                description="동일한 거래가 중복 발생",
+                score=0.9,
+        ))
         return results
 
 
@@ -130,7 +106,7 @@ class AnomalyDetector:
         anomaly_df = anomaly_df.sort_values("score", ascending=False)
 
         # 원본 데이터와 조인
-        result = df.loc[anomaly_df["index"]].copy()
+        result = df.loc[anomaly_df["index"].unique()].copy()
         result["탐지유형"] = anomaly_df["type"].values
         result["심각도"] = anomaly_df["severity"].values
         result["설명"] = anomaly_df["description"].values
