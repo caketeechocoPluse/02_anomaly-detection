@@ -14,6 +14,13 @@ import datetime
 # ---------------------------------------------------------------------------- #
 #                                  1. 데이터 클래스                             #
 # ---------------------------------------------------------------------------- #
+class Severity(Enum):
+    """심각도 열거형"""
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
 
 @dataclass
 class AnomalyReport:
@@ -33,17 +40,33 @@ class AnomalyReport:
         """딕셔너리 변환"""
         return asdict(self)
 
+@dataclass
+class DetectionConfig:
+    """탐지 설정 중앙화"""
+    round_amount_threshold: int = 1_000_000
+    small_transaction_threshold: int = 100_000
+    small_transaction_quantile: float = 0.95
+    z_score_threshold: float = 3.0
+    iqr_multiplier: float = 1.5
+    benford_deviation_threshold: float = 0.5
+    benford_sample_limit: int = 10
 
 # ---------------------------------------------------------------------------- #
 #                               2. Strategy 인터페이스                          #
 # ---------------------------------------------------------------------------- #
 class DetectionStrategy(Protocol):
-    """이상 거래 탐지//
-    프로토콜//"""
+    """이상 거래 탐지 전략 프로토콜"""
 
+    # 전략 이름
+    name: str
+    
     def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
+        """탐지 실행"""
         ...
 
+    def validate_data(self, df: pd.DataFrame) -> None:
+        """데이터 검증"""
+        ...
 
 # ---------------------------------------------------------------------------- #
 #                             3. Concrete Strategy                             #
@@ -80,39 +103,80 @@ class DuplicateDetector:
 class AnomalyDetector:
     """이상 거래 탐지기//컨텍스트//"""
 
-    def __init__(self, _strategies: list[DetectionStrategy]) -> None:
-        self._strategies = _strategies
-
+    def __init__(
+        self,
+        strategies: list[DetectionStrategy],
+        config: DetectionConfig | None = None
+    ):
+        self._strategies = strategies
+        self._config = config or DetectionConfig()
+        self._validate_strategies()
+    
+    
+    def _validate_strategies(self) -> None:
+        """전략 검증"""
+        if not self._strategies:
+            raise ValueError("최소 1개 이상의 전략이 필요")
+    
+    
     def add_strategy(self, new_strategy: DetectionStrategy) -> None:
         """새로운 탐지 주입"""
         self._strategies.append(new_strategy)
 
+
     def detect_all(self, df: pd.DataFrame) -> pd.DataFrame:
         """모든 탐지 실행"""
+        self._validate_dataframe(df)
+        
         all_results = []
         for strategy in self._strategies:
-            print(f"{strategy.__class__.__name__} 실행중...")
-            all_results.extend(strategy.detect(df))
+            try:
+                print(f"{strategy.name} 실행중")
+                results = strategy.detect(df)
+                all_results.extend(results)
+                
+            except Exception as e:
+                print(f"{strategy.name} 실패: {e}")
+                continue
 
         return self._process_results(df, all_results)
+
+
+    def _validate_dataframe(self, df: pd.DataFrame) -> None:
+        """데이터프레임 검증"""
+        if df.empty:
+            raise ValueError("빈 데이터프레임")
+
+        required = ["거래일자", "계정과목", "금액", "거래처", "담당자"]
+        missing = set(required) - set(df.columns)
+        if missing:
+            raise ValueError(f"필수 칼럼 누락: {missing}")
+
 
     def _process_results(self, df: pd.DataFrame, results: list[AnomalyReport]) -> pd.DataFrame:
         """탐지 결과 반환"""
         if not results:
+            print("\n 이상거래가 발견되지 않았습니다")
             return pd.DataFrame()
 
-        # 중복 제거 (같은 거래에 여러 이상 유형)
-        anomaly_df = pd.DataFrame([asdict(r) for r in results])
+        # AnomalyReport를 DataFrame으로 변환
+        anomaly_df = pd.DataFrame([r.to_dict() for r in results])
         anomaly_df = anomaly_df.sort_values("score", ascending=False)
 
-        # 원본 데이터와 조인
-        result = df.loc[anomaly_df["index"].unique()].copy()
-        result["탐지유형"] = anomaly_df["type"].values
-        result["심각도"] = anomaly_df["severity"].values
-        result["설명"] = anomaly_df["description"].values
-        result["위험점수"] = anomaly_df["score"].values
+        # 중복 인덱스 처리
+        unique_indices = anomaly_df["index"].unique()
+        result = df.loc[unique_indices].copy()
 
-        print(f"\\n✅ 탐지 완료: {len(result)}건의 의심 거래 발견")
+        # 첫 번째 탐지 결과만 사용 (가장 높은 score)
+        first_detection = anomaly_df.drop_duplicates(subset=["index"], keep="first")
+        first_detection = first_detection.set_index("index")
+                
+        result["탐지유형"] = first_detection.loc[result.index, "type"].values
+        result["심각도"] = first_detection.loc[result.index, "severity"].values
+        result["설명"] = first_detection.loc[result.index, "description"].values
+        result["위험점수"] = first_detection.loc[result.index, "score"].values
+
+        print(f"\n✅ 탐지 완료: {len(result)}건의 의심 거래 발견")
         return result
 
 
