@@ -68,8 +68,41 @@ class DetectionStrategy(Protocol):
         """데이터 검증"""
         ...
 
+
+
 # ---------------------------------------------------------------------------- #
-#                             3. Concrete Strategy                             #
+#                             3. 유틸리티 클래스                                 #
+# ---------------------------------------------------------------------------- #
+class ReportGenerator:
+    """리포트 생성기"""
+    
+    @staticmethod
+    def generate_summary(results: pd.DataFrame) -> str:
+        """요약 리포트"""
+        if results.empty:
+            return "이상 거래가 발견되지 않았습니다."
+
+        summary = []
+        summary.append("=" * 50)
+        summary.append("이상 거래 탐지 결과 요약")
+        summary.append("=" * 50)
+        
+        summary.append("01. 탐지 유형별:")
+        for type_name, count in results["탐지유형"].value_counts().items():
+            summary.append(f"  - {type_name}: {count}건")
+        
+        summary.append("\n02. 심각도별:")
+        for severity, count in results["심각도"].value_counts().items():
+            summary.append(f"  - {severity}: {count}건")
+        
+        summary.append(f"\n03. 평균 위험 점수: {results['위험점수'].mean():.2f}")
+        summary.append("=" * 50)
+        
+        return "\n".join(summary)
+        
+
+# ---------------------------------------------------------------------------- #
+#                             4. Concrete Strategy                             #
 # ---------------------------------------------------------------------------- #
 class DuplicateDetector:
     """중복거래 탐지 클래스"""
@@ -98,7 +131,7 @@ class DuplicateDetector:
 
 
 # ---------------------------------------------------------------------------- #
-#                                   4.Context                                  #
+#                                   5.Context                                  #
 # ---------------------------------------------------------------------------- #
 class AnomalyDetector:
     """이상 거래 탐지기//컨텍스트//"""
@@ -181,7 +214,7 @@ class AnomalyDetector:
 
 
 # ---------------------------------------------------------------------------- #
-#                                   5. Client                                  #
+#                                   6. Client                                  #
 # ---------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
