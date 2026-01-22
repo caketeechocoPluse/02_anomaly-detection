@@ -190,6 +190,55 @@ class WeekendTransactionDetector:
             ))
         
         return results
+
+
+class BenfordLawDetector:
+    """벤포드 법칙 위반 탐지"""
+    
+    name = "벤포드법칙탐지"
+    
+    BENFORD_DIST = {
+        1: 0.301, 2: 0.176, 3: 0.125, 4: 0.097, 5: 0.079,
+        6: 0.067, 7: 0.058, 8: 0.051, 9: 0.046
+    }
+
+    def __init__(self, config: DetectionConfig | None = None):
+        self.config = config or DetectionConfig()
+        
+        
+    def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
+        first_digits = df["금액"].abs().astype(int).astype(str).str[0].astype(int)
+        results = []
+        
+        for digit in range(1, 10):
+            expected = self.BENFORD_DIST[digit] * len(df)
+            actual = (first_digits == digit).sum()
+        
+            if expected == 0:
+                continue
+        
+            deviation = abs(actual - expected) / expected
+            
+            if deviation > self.config.benford_deviation_threshold:
+                suspicious = df[first_digits == digit]
+                limit = self.config.benford_sample_limit
+                
+                for idx in suspicious.index[:limit]:
+                    results.append(AnomalyReport(
+                        index=int(idx),
+                        type="벤포드법칙위반",
+                        severity=Severity.LOW.value,
+                        description=f"첫 자리{digit} 빈도 이상 (편차: {deviation:.2%})",
+                        score=0.4,
+                        context={
+                            "첫자리": digit,
+                            "기대빈도": float(expected),
+                            "실제빈도": int(actual),
+                            "편차": float(deviation)
+                        }
+                    ))
+        
+        return results
 # ---------------------------------------------------------------------------- #
 #                                   5.Context                                  #
 # ---------------------------------------------------------------------------- #
