@@ -128,8 +128,68 @@ class DuplicateDetector:
         return results
 
 
+class RoundAmountDetector:
+    """라운드 금액 탐지"""
+    
+    name = "라운드금액탐지"
 
 
+    def __init__(self, config: DetectionConfig | None = None):
+        self.config = config or DetectionConfig()
+
+
+    def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
+        threshold = self.config.round_amount_threshold
+        
+        round_amounts = df[
+            (df["금액"] % threshold == 0) &
+            (df["금액"] >= threshold)
+        ]
+        
+        results = []
+        for idx in round_amounts.index:
+            amount = df.loc[idx, "금액"]
+            results.append(AnomalyReport(
+                index=int(idx),
+                type="라운드금액",
+                severity=Severity.MEDIUM.value,
+                description=f"{amount:,.0f}원 (백만원 단위)",
+                score=0.6,
+                context={"금액": float(amount), "threshold": threshold}
+            ))
+        
+        return results
+
+
+class WeekendTransactionDetector:
+    """주말 거래 탐지"""
+    
+    name = "주말거래탐지"
+    
+    def __init__(self, config: DetectionConfig | None = None):
+        self.config = config or DetectionConfig()
+    
+    def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
+        df_copy = df.copy()
+        df_copy["요일"] = pd.to_datetime(df_copy["거래일자"]).dt.dayofweek
+        weekend = df_copy[df_copy["요일"] >= 5]
+        
+        results = []
+        for idx in weekend.index:
+            day_name = ["월", "화", "수", "목", "금", "토", "일"][df_copy.loc[idx, "요일"]]
+            results.append(AnomalyReport(
+                index=int(idx),
+                type="주말거래",
+                severity=Severity.MEDIUM.value,
+                description=f"{day_name}요일 거래",
+                score=0.7,
+                context={
+                    "거래일자": str(df.loc[idx, "거래일자"]),
+                    "요일": day_name
+                }
+            ))
+        
+        return results
 # ---------------------------------------------------------------------------- #
 #                                   5.Context                                  #
 # ---------------------------------------------------------------------------- #
