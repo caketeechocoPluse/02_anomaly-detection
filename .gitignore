@@ -12,3 +12,4 @@ CLAUDE.md
 .python-version
 uv.lock
 .gitattributes
+.vscode/settings.json
