@@ -239,6 +239,107 @@ class BenfordLawDetector:
                     ))
         
         return results
+
+
+class FrequentSmallTransactionDetector:
+    """빈번한 소액 거래 탐지"""
+    
+    name = "빈번한소액거래탐지"
+    
+    def __init__(self, config: DetectionConfig | None = None):
+        self.config = config or DetectionConfig()
+
+
+    def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
+        threshold = self.config.small_transaction_threshold
+        small_txns = df[df["금액"] < threshold]
+        
+        if small_txns.empty:
+            return []
+        
+        freq: pd.Series = small_txns.groupby("담당자").size()
+        quantile = self.config.small_transaction_quantile
+        suspicious_users = freq[freq > freq.quantile(quantile)].index
+        
+        results = []
+        for user in suspicious_users:
+            user_txns = small_txns[small_txns["담당자"] == user]
+            count = len(user_txns)
+            
+            for idx in user_txns.index:
+                results.append(AnomalyReport(
+                    index=int(idx),
+                    type="빈번한소액거래",
+                    severity=Severity.MEDIUM.value,
+                    description=f"{user} - 소액 거래 {count}건",
+                    score=0.65,
+                    context={
+                        "담당자": str(user),
+                        "거래건수": count,
+                        "threshold": threshold
+                    }
+                ))
+        
+        return results
+
+class StatisticalOutlierDetector:
+    """통계적 이상치 탐지 (IQR + Z-score)"""
+    
+    name = "통계적이상치탐지"
+    
+    def __init__(self, config: DetectionConfig | None = None):
+        self.config = config or DetectionConfig()
+    
+    
+    def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
+        results = []
+        
+        for account in df["계정과목"].unique():
+            account_df = df[df["계정과목"] == account]
+            if len(account_df) < 3:
+                continue
+            
+            amounts = account_df["금액"]
+            
+            # IQR 계산
+            Q1 = amounts.quantile(0.25)
+            Q3 = amounts.quantile(0.75)
+            IQR = Q3 - Q1
+            lower = Q1 - self.config.iqr_multiplier * IQR
+            upper = Q3 + self.config.iqr_multiplier * IQR
+            
+            outliers = account_df[
+                (account_df["금액"] < lower) |
+                (account_df["금액"] > upper)
+            ]
+            #Z-score 계산
+            z_scores = np.abs(stats.zscore(amounts))
+            
+            for idx in outliers.index:
+                loc = account_df.index.get_loc(idx)
+                z_score = z_scores[loc]
+                
+                severity = (
+                    Severity.HIGH.value
+                    if z_score > self.config.z_score_threshold
+                    else Severity.MEDIUM.value
+                )
+                
+                results.append(AnomalyReport(
+                    index=int(idx),
+                    type="통계적이상치",
+                    severity=severity,
+                    description=f"Z-score: {z_score:.2f}",
+                    score=min(z_score / 3, 1.0),
+                    context={
+                        "계정과목": str(account),
+                        "금액": float(df.loc[idx, "금액"]),
+                        "z-score": float(z_score),
+                        "Q1": float(Q1),
+                        "Q3": float(Q3)
+                    }
+                ))
+        return results
 # ---------------------------------------------------------------------------- #
 #                                   5.Context                                  #
 # ---------------------------------------------------------------------------- #
