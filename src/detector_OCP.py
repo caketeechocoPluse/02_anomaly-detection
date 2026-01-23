@@ -1,6 +1,6 @@
 # src/detector.py
 
-from typing import Protocol, Any
+from typing import Protocol, Any, runtime_checkable
 from dataclasses import dataclass, fields, asdict, field
 from enum import Enum
 import pandas as pd
@@ -54,18 +54,19 @@ class DetectionConfig:
 # ---------------------------------------------------------------------------- #
 #                               2. Strategy 인터페이스                          #
 # ---------------------------------------------------------------------------- #
+@runtime_checkable
 class DetectionStrategy(Protocol):
     """이상 거래 탐지 전략 프로토콜"""
 
     # 전략 이름
     name: str
-    
+
+    def __init__(self, config: DetectionConfig | None = None) -> None:
+            """모든 전략은 동일한 생성자 시그니처를 가져야 함"""
+            ...
+
     def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
         """탐지 실행"""
-        ...
-
-    def validate_data(self, df: pd.DataFrame) -> None:
-        """데이터 검증"""
         ...
 
 
@@ -106,6 +107,12 @@ class ReportGenerator:
 # ---------------------------------------------------------------------------- #
 class DuplicateDetector:
     """중복거래 탐지 클래스"""
+    
+    name = "중복거래탐지"
+    
+    def __init__(self, config: DetectionConfig | None = None):
+        self.config = config or DetectionConfig()
+
 
     def detect(self, df: pd.DataFrame) -> list[AnomalyReport]:
         """중복 거래 탐지 실행"""
@@ -121,10 +128,15 @@ class DuplicateDetector:
             results.append(AnomalyReport(
                 index=int(idx),
                 type="중복거래",
-                severity="HIGH",
+                severity=Severity.HIGH.value,
                 description="동일한 거래가 중복 발생",
                 score=0.9,
-        ))
+                context={
+                    "거래일자": str(df.loc[idx, "거래일자"]),
+                    "금액": float(df.loc[idx, "금액"]),
+                    "거래처": str(df.loc[idx, "거래처"])
+                }
+            ))
         return results
 
 
@@ -419,12 +431,47 @@ class AnomalyDetector:
         result["설명"] = first_detection.loc[result.index, "description"].values
         result["위험점수"] = first_detection.loc[result.index, "score"].values
 
-        print(f"\n✅ 탐지 완료: {len(result)}건의 의심 거래 발견")
+        print(f"\n 탐지 완료: {len(result)}건의 의심 거래 발견")
         return result
 
 
 # ---------------------------------------------------------------------------- #
-#                                   6. Client                                  #
+#                                   6. Factory                                  #
+# ---------------------------------------------------------------------------- #
+class DetectorFactory:
+    """탐지 전략 팩토리"""
+    
+    _registry: dict[str, type[DetectionStrategy]] = {}
+    
+    @classmethod
+    def register(cls, name: str, detector_class: type[DetectionStrategy]) -> None:
+        """전략 등록"""
+        cls._registry[name] = detector_class
+    
+    @classmethod
+    def create(cls, name: str, config: DetectionConfig | None = None) -> DetectionStrategy:
+        """전략 생성"""
+        if name not in cls._registry:
+            raise ValueError(f"알 수 없는 탐지기: {name}")
+        return cls._registry[name](config)
+
+    @classmethod
+    def create_all(cls, config: DetectionConfig | None = None) -> list[DetectionStrategy]:
+        """모든 전략 생성"""
+        return [cls.create(name, config) for name in cls._registry]
+
+
+# 전략 등록
+DetectorFactory.register("중복거래", DuplicateDetector)
+DetectorFactory.register("라운드금액", RoundAmountDetector)
+DetectorFactory.register("주말거래", WeekendTransactionDetector)
+DetectorFactory.register("벤포드법칙", BenfordLawDetector)
+DetectorFactory.register("빈번한소액거래", FrequentSmallTransactionDetector)
+DetectorFactory.register("통계적이상치", StatisticalOutlierDetector)
+
+
+# ---------------------------------------------------------------------------- #
+#                                   7. Client                                  #
 # ---------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
