@@ -444,9 +444,9 @@ class DetectorFactory:
     _registry: dict[str, type[DetectionStrategy]] = {}
     
     @classmethod
-    def register(cls, name: str, detector_class: type[DetectionStrategy]) -> None:
+    def register(cls, detector_class: type[DetectionStrategy]) -> None:
         """전략 등록"""
-        cls._registry[name] = detector_class
+        cls._registry[detector_class.name] = detector_class
     
     @classmethod
     def create(cls, name: str, config: DetectionConfig | None = None) -> DetectionStrategy:
@@ -462,12 +462,12 @@ class DetectorFactory:
 
 
 # 전략 등록
-DetectorFactory.register("중복거래", DuplicateDetector)
-DetectorFactory.register("라운드금액", RoundAmountDetector)
-DetectorFactory.register("주말거래", WeekendTransactionDetector)
-DetectorFactory.register("벤포드법칙", BenfordLawDetector)
-DetectorFactory.register("빈번한소액거래", FrequentSmallTransactionDetector)
-DetectorFactory.register("통계적이상치", StatisticalOutlierDetector)
+DetectorFactory.register(DuplicateDetector)
+DetectorFactory.register(RoundAmountDetector)
+DetectorFactory.register(WeekendTransactionDetector)
+DetectorFactory.register(BenfordLawDetector)
+DetectorFactory.register(FrequentSmallTransactionDetector)
+DetectorFactory.register(StatisticalOutlierDetector)
 
 
 # ---------------------------------------------------------------------------- #
@@ -475,9 +475,48 @@ DetectorFactory.register("통계적이상치", StatisticalOutlierDetector)
 # ---------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
-    pass
-    # a. 인스턴스화
-
-    # b. 주입
-
-    # c. 실행
+    # 샘플 데이터
+    sample_data = {
+        "거래일자": ["2024-01-15", "2024-01-15", "2024-01-16", "2024-01-20", "2024-01-21"],
+        "계정과목": ["접대비", "접대비", "소모품비", "복리후생비", "교통비"],
+        "금액": [1000000, 1000000, 50000, 5000000, 80000],
+        "거래처": ["A회사", "A회사", "B회사", "C회사", "D회사"],
+        "담당자": ["김철수", "김철수", "이영희", "박민수", "이영희"]
+    }
+    df = pd.DataFrame(sample_data)
+    
+    # 1. 전체 전략 실행
+    print("=" * 60)
+    print("1. 전체 전략 실행")
+    print("=" * 60)
+    detector = AnomalyDetector(DetectorFactory.create_all())
+    result = detector.detect_all(df)
+    print("\n", result)
+    print("\n", ReportGenerator.generate_summary(result))
+    
+    # 2. 특정 전략만 실행
+    print("\n" + "=" * 60)
+    print("2. 특정 전략만 실행 (중복거래 + 라운드금액)")
+    print("=" * 60)
+    strategies = [
+        DetectorFactory.create("중복거래탐지"),
+        DetectorFactory.create("라운드금액탐지")
+    ]
+    detector2 = AnomalyDetector(strategies)
+    result2 = detector2.detect_all(df)
+    print("\n", result2)
+    
+    # 3. 커스텀 설정
+    print("\n" + "=" * 60)
+    print("3. 커스텀 설정 적용")
+    print("=" * 60)
+    config = DetectionConfig(
+        round_amount_threshold=5_000_000,
+        z_score_threshold=2.5
+    )
+    detector3 = AnomalyDetector(
+        DetectorFactory.create_all(config),
+        config=config
+    )
+    result3 = detector3.detect_all(df)
+    print("\n", result3)
