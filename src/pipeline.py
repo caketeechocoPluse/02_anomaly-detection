@@ -15,9 +15,9 @@ import datetime
 @dataclass
 class PipelineConfig:
     """파이프라인 설정"""
-    output_dir: str = "output"
+    output_dir: str = "outputs"
     save_results: bool = True
-    save_metrics: bool = True
+    save_evaluation_results: bool = True
     verbose: bool = True
 
 
@@ -37,7 +37,7 @@ class DetectionPipeline:
         # 결과 저장
         self.transactions_df: pd.DataFrame | None = None
         self.results_df: pd.DataFrame | None = None
-        self.metrics: dict[str, Any] = {}
+        self.evaluation_results: dict[str, Any] = {}
     
     
     def run(self) -> dict[str, Any]:
@@ -47,7 +47,7 @@ class DetectionPipeline:
             dict: {
                 "transactions": DataFrame,
                 "results": DataFrame,
-                "metrics": dict,
+                "evaluation_results": dict,
             }
         """
         
@@ -86,8 +86,8 @@ class DetectionPipeline:
         self._log("3단계: 성능 평가 (Ground Truth 비교)")
         self._log("=" * 60)
         
-        self.metrics = self._evaluate_performance()
-        self._print_metrics()
+        self.evaluation_results = self._evaluate_performance()
+        self._print_evaluation_results()
         
         
         # 4. 결과 저장
@@ -101,7 +101,7 @@ class DetectionPipeline:
         return {
             "transactions": self.transactions_df,
             "results": self.results_df,
-            "metrics": self.metrics
+            "evaluation_results": self.evaluation_results
         }
     
     
@@ -136,9 +136,9 @@ class DetectionPipeline:
         
         # 탐지 결과
         if self.results_df is None:
-            raise ValueError("회계 데이터 생성에 실패하여 파이프라인을 실행할 수 없습니다.")
+            raise ValueError("이상 탐지에 실패하여 파이프라인을 실행할 수 없습니다.")
         
-        detected_anomalies = set(self.results_df["거래인덱스"].unique())
+        detected_anomalies = set(self.results_df.index)
         detected_normal = set(self.transactions_df.index) - detected_anomalies
         
         
@@ -179,16 +179,71 @@ class DetectionPipeline:
             }
         }
 
-    def _save_results(self):
+    def _save_results(self) -> None:
         """결과 저장 (CSV + JSON)"""
+        output_path = Path(self.config.output_dir)
+        output_path.mkdir(exist_ok=True)
+        
+        # 타입체크
+        if self.transactions_df is None:
+            raise ValueError("회계 데이터 생성에 실패하여 파이프라인을 실행할 수 없습니다.")
+        
+        # 1. 전체 거래 데이터
+        self.transactions_df.to_csv(
+            output_path / "transactions.csv",
+            index=False,
+            encoding="utf-8-sig"
+        )
+        
+        
+        # 타입체크
+        if self.results_df is None:
+            raise ValueError("이상 탐지에 실패하여 파이프라인을 실행할 수 없습니다.")
+        
+        # 2. 탐지 결과
+        self.results_df.to_csv(
+            output_path / "anomalies_detected.csv",
+            index=False,
+            encoding="utf-8-sig"
+        )
+        
+        
+        # 3. 성능 메트릭(Metric)
+        if self.config.save_evaluation_results:
+            with open(output_path / "evaluation_results.json", "w",encoding="utf-8") as f:
+                json.dump(self.evaluation_results, f, indent=2, ensure_ascii=False)
+        
+        
+        # 4. 실행 메타데이터
+        metadata = {
+            "executed_at": datetime.datetime.now().isoformat(),
+            "data_generator": type(self.data_generator).__name__,
+            "detector": type(self.detector).__name__,
+            "num_strategies": len(self.detector._strategies),
+            "strategy_names": [s.name for s in self.detector._strategies]
+        }
+        with open(output_path / "metadata.json", "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
     
-    
-    
-    def _print_metrics(self):
+    def _print_evaluation_results(self) -> None:
         """메트릭 출력"""
+        cm = self.evaluation_results["confusion_matrix"]
+        m = self.evaluation_results["metrics"]
+        
+        self._log("\n Confusion Matrix:")
+        self._log(f"  TP (True Positive): {cm['true_positive']:>4}건")
+        self._log(f"  FP (False Positive): {cm['false_positive']:>4}건")
+        self._log(f"  TN (True Negative): {cm['true_negative']:>4}건")
+        self._log(f"  FN (False Negative): {cm['false_negative']:>4}건")
+        
+        self._log("\n 성능 지표")
+        self._log(f"  Precision (정밀도): {m['precision']:.2%}")
+        self._log(f"  Recall (재현율): {m['recall']:.2%}")
+        self._log(f"  F1 Score: {m['f1_score']:.2%}")
+        self._log(f"  Accuracy (정확도): {m['accuracy']:.2%}")
     
     
-    def _log(self, message: str):
+    def _log(self, message: str) -> None:
         """로깅"""
         if self.config.verbose:
             print(message)

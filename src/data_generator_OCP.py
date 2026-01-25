@@ -3,10 +3,10 @@ import numpy as np
 from faker import Faker
 import datetime
 import random
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
-
+@runtime_checkable
 class GeneratingStrategy(Protocol):
     """
     데이터 생성//
@@ -59,7 +59,7 @@ class NormalDataGenerator:
         }
         return transaction
 
-    def _generate_description(self, account):
+    def _generate_description(self, account: str) -> str:
         """적요 생성"""
         descriptions = {
             "현금": ["현금 입금", "현금 출금", "소액 경비"],
@@ -71,9 +71,6 @@ class NormalDataGenerator:
             "여비교통비": ["출장비", "교통비", "숙박비"],
         }
         return random.choice(descriptions.get(account, ["기타"]))
-
-
-
 
 
 
@@ -242,8 +239,8 @@ class AccountingDataGenerator:
         fake: Faker,
         start_dt: datetime.date,
         end_dt: datetime.date,
-        num_total_transactions=100000,
-        anomaly_ratio=0.05,
+        num_total_transactions: int =100000,
+        anomaly_ratio: float =0.05,
     ):
         self.normal_strategies = normal_strategies
         self.anomaly_strategies = anomaly_strategies
@@ -274,7 +271,7 @@ class AccountingDataGenerator:
         normal_df = pd.DataFrame(num_normal)
         return normal_df
 
-    def generate_dataset(self):
+    def generate_dataset(self) -> pd.DataFrame:
         """전체 데이터셋 생성"""
 
         normal_df = self.generate_normal()
@@ -299,8 +296,8 @@ if __name__ == "__main__":
     start_dt = datetime.date(2025, 1, 1)
     end_dt = datetime.date(2025, 12, 31)
 
-    normal_gen = [NormalDataGenerator(fake, start_dt, end_dt)]
-    anomaly_gen = [
+    normal_gen: list[GeneratingStrategy] = [NormalDataGenerator(fake, start_dt, end_dt)]
+    anomaly_gen: list[GeneratingStrategy] = [
         DuplicateGenerator(fake, start_dt, end_dt),
         RoundGenerator(fake, start_dt, end_dt),
         WeekendTradeGenerator(fake, start_dt, end_dt),
