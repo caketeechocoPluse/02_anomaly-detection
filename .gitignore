@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 .mypy_cache/
+.vscode/
 *.pyc
 .env
 .DS_Store
@@ -13,3 +14,4 @@ CLAUDE.md
 uv.lock
 .gitattributes
 .vscode/settings.json
+cspell.json
