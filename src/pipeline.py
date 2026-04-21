@@ -10,6 +10,8 @@ import pandas as pd
 from pathlib import Path
 import json
 import datetime
+from s3_uploader import S3Uploader
+
 
 
 @dataclass
@@ -19,6 +21,9 @@ class PipelineConfig:
     save_results: bool = True
     save_evaluation_results: bool = True
     verbose: bool = True
+    # AWS 전송 옵션
+    upload_to_aws: bool = True
+    s3_bucket: str = "accounting-anomaly-detection-user"
 
 
 class DetectionPipeline:
@@ -28,11 +33,13 @@ class DetectionPipeline:
         self,
         data_generator: Any,  # AccountingDataGenerator
         detector: Any,  # AnomalyDetector
-        config: PipelineConfig | None = None
+        config: PipelineConfig | None = None,
+        s3_uploader: S3Uploader | None = None
     ):
         self.data_generator = data_generator
         self.detector = detector
         self.config = config or PipelineConfig()
+        self.s3_uploader = s3_uploader or (S3Uploader() if self.config.upload_to_aws else None)
         
         # 결과 저장
         self.transactions_df: pd.DataFrame | None = None
@@ -98,13 +105,46 @@ class DetectionPipeline:
             self._save_results()
             self._log(f"{self.config.output_dir}/ 에 저장 완료")
         
+            # 4.1 AWS S3 업로드
+            if self.config.upload_to_aws and isinstance(self.s3_uploader, S3Uploader):
+                self._upload_to_s3()
+        
         return {
             "transactions": self.transactions_df,
             "results": self.results_df,
             "evaluation_results": self.evaluation_results
         }
     
-    
+
+
+    def _upload_to_s3(self) -> None:
+        """S3 업로드 실행 로직"""
+        output_path = Path(self.config.output_dir)
+        bucket = self.config.s3_bucket
+
+        # 업로드 대상 정의
+        upload_targets = {
+            "transactions.csv": "raw/transactions.csv",
+            "anomalies_detected.csv": "processed/anomalies_detected.csv",
+            "evaluation_results.json": "metadata/evaluation_results.json"
+        }
+        
+        if self.config.upload_to_aws and isinstance(self.s3_uploader, S3Uploader):
+            for local_file, s3_key in upload_targets.items():
+                local_path = output_path / local_file
+                if local_path.exists():
+                    try:
+                        success = self.s3_uploader.upload_csv(str(local_path), bucket, s3_key)
+                        if success:
+                            self._log(f"S3 업로드 성공: {s3_key}")
+                        else:
+                            self._log(f"S3 업로드 실패: {s3_key}")
+                    except Exception as e:
+                        self._log(f"S3 업로드 오류: {str(e)}")
+        else:
+            self._log("AWS S3 업로드 기능이 비활성화됨")
+
+
     def _evaluate_performance(self) -> dict[str, Any]:
         """성능 평가 (Confusion Matrix 기반)
 
@@ -189,11 +229,14 @@ class DetectionPipeline:
             raise ValueError("회계 데이터 생성에 실패하여 파이프라인을 실행할 수 없습니다.")
         
         # 1. 전체 거래 데이터
-        self.transactions_df.to_csv(
-            output_path / "transactions.csv",
-            index=False,
-            encoding="utf-8-sig"
-        )
+        try:
+            self.transactions_df.to_csv(
+                output_path / "transactions.csv",
+                index=False,
+                encoding="utf-8-sig"
+            )
+        except Exception as e:
+            self._log(f"거래 데이터 CSV 저장 오류: {str(e)}")
         
         
         # 타입체크
@@ -201,29 +244,37 @@ class DetectionPipeline:
             raise ValueError("이상 탐지에 실패하여 파이프라인을 실행할 수 없습니다.")
         
         # 2. 탐지 결과
-        self.results_df.to_csv(
-            output_path / "anomalies_detected.csv",
-            index=False,
-            encoding="utf-8-sig"
-        )
-        
+        try:
+            self.results_df.to_csv(
+                output_path / "anomalies_detected.csv",
+                index=False,
+                encoding="utf-8-sig"
+            )
+        except Exception as e:
+            self._log(f"탐지 결과 CSV 저장 오류: {str(e)}")
         
         # 3. 성능 메트릭(Metric)
         if self.config.save_evaluation_results:
-            with open(output_path / "evaluation_results.json", "w",encoding="utf-8") as f:
-                json.dump(self.evaluation_results, f, indent=2, ensure_ascii=False)
+            try:
+                with open(output_path / "evaluation_results.json", "w",encoding="utf-8") as f:
+                    json.dump(self.evaluation_results, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                self._log(f"성능 매트릭 JSON 저장 오류: {str(e)}")
         
         
         # 4. 실행 메타데이터
-        metadata = {
-            "executed_at": datetime.datetime.now().isoformat(),
-            "data_generator": type(self.data_generator).__name__,
-            "detector": type(self.detector).__name__,
-            "num_strategies": len(self.detector._strategies),
-            "strategy_names": [s.name for s in self.detector._strategies]
-        }
-        with open(output_path / "metadata.json", "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        try:
+            metadata = {
+                "executed_at": datetime.datetime.now().isoformat(),
+                "data_generator": type(self.data_generator).__name__,
+                "detector": type(self.detector).__name__,
+                "num_strategies": len(self.detector._strategies),
+                "strategy_names": [s.name for s in self.detector._strategies]
+            }
+            with open(output_path / "metadata.json", "w", encoding="utf-8") as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self._log(f"실행 메타데이터 JSON 저장 오류: {str(e)}")
     
     def _print_evaluation_results(self) -> None:
         """메트릭 출력"""
