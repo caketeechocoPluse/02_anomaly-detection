@@ -10,9 +10,11 @@ import pandas as pd
 from pathlib import Path
 import json
 import datetime
-from s3_uploader import S3Uploader
+from .s3_uploader import S3Uploader
+import os
+from dotenv import load_dotenv
 
-
+load_dotenv()
 
 @dataclass
 class PipelineConfig:
@@ -23,7 +25,7 @@ class PipelineConfig:
     verbose: bool = True
     # AWS 전송 옵션
     upload_to_aws: bool = True
-    s3_bucket: str = "accounting-anomaly-detection-user"
+    s3_bucket=os.getenv('AWS_S3_BUCKET_NAME')
 
 
 class DetectionPipeline:
