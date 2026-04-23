@@ -16,3 +16,6 @@ uv.lock
 .gitattributes
 .vscode/settings.json
 cspell.json
+*.pbix
+*.hyper
+*.tde
