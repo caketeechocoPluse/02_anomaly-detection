@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest manifest-version="0.1" xmlns="http://www.tableau.com/xml/extension_manifest">
+  <worksheet-extension id="com.ladataviz.extension.gauge" extension-version="1.0.0">
+    <default-locale>en_US</default-locale>
+    <name resource-id="name"/>
+    <description>Gauge</description>
+    <author name="LaDataViz" email="tristan@ladataviz.com" organization="LaDataViz" website="https://www.ladataviz.com"/>
+    <min-api-version>1.11</min-api-version>
+    <source-location>
+      <url>https://partner-extensions.tableauusercontent.com/viz/ladataviz/all/gauge.html</url>
+    </source-location>
+    <icon/>
+    <context-menu>
+      <configure-context-menu-item />
+    </context-menu>
+    <encoding id="value">
+      <display-name>Value</display-name>
+      <role-spec>
+        <role-type>continuous-measure</role-type>
+        <role-type>discrete-measure</role-type>
+      </role-spec>
+      <fields max-count="1"/>
+      <encoding-icon token="hash"/>
+    </encoding>
+    <encoding id="target">
+      <display-name>Target</display-name>
+      <role-spec>
+        <role-type>continuous-measure</role-type>
+        <role-type>discrete-measure</role-type>
+      </role-spec>
+      <fields max-count="1"/>
+      <encoding-icon token="letter-t"/>
+    </encoding>
+  </worksheet-extension>
+  <resources>
+    <resource id="name">
+      <text locale="en_US">Gauge</text>
+    </resource>
+  </resources>
+</manifest>
