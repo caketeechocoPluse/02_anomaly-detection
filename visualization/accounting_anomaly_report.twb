@@ -2879,7 +2879,7 @@
       <simple-id uuid='{FC69DEDD-08DA-47DC-B60D-D5628B0247F2}' />
     </dashboard>
   </dashboards>
-  <windows source-height='48'>
+  <windows source-height='30'>
     <window class='dashboard' maximized='true' name='대시보드'>
       <viewpoints>
         <viewpoint name='KPI'>
